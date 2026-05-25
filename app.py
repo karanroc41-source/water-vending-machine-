@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify
 import razorpay
 import os
 
@@ -13,74 +13,41 @@ client = razorpay.Client(auth=(
 def home():
     return "Razorpay server is running"
 
-# ✅ Order create API
-@app.route("/create_order", methods=["POST"])
-def create_order():
+@app.route("/create_payment_link", methods=["POST"])
+def create_payment_link():
     data = request.json
     amount = int(data.get("amount", 1)) * 100
 
-    order = client.order.create({
+    payment_link = client.payment_link.create({
         "amount": amount,
         "currency": "INR",
-        "payment_capture": 1
+        "description": "Water Vending Machine Payment",
+        "customer": {
+            "name": "Customer"
+        },
+        "notify": {
+            "sms": False,
+            "email": False
+        }
     })
 
     return jsonify({
-        "order_id": order["id"],
-        "amount": order["amount"]
+        "payment_link_id": payment_link["id"],
+        "payment_url": payment_link["short_url"],
+        "amount": payment_link["amount"],
+        "status": payment_link["status"]
     })
 
-# ✅ NEW: Payment Page (IMPORTANT 🔥)
-@app.route("/pay")
-def pay():
-    order_id = request.args.get("order_id")
+@app.route("/check_payment_link", methods=["GET"])
+def check_payment_link():
+    payment_link_id = request.args.get("payment_link_id")
 
-    html = f"""
-    <html>
-    <head>
-        <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-    </head>
-    <body>
-        <h2>Processing Payment...</h2>
-        <script>
-            var options = {{
-                "key": "{os.getenv("RAZORPAY_KEY_ID")}",
-                "amount": "100",
-                "currency": "INR",
-                "name": "Water Vending Machine",
-                "description": "Test Payment",
-                "order_id": "{order_id}",
-                "handler": function (response){{
-                    alert("Payment Successful!");
-                }},
-                "theme": {{
-                    "color": "#3399cc"
-                }}
-            }};
-            var rzp = new Razorpay(options);
-            rzp.open();
-        </script>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
+    payment_link = client.payment_link.fetch(payment_link_id)
 
-# ✅ Payment check
-@app.route("/check_payment", methods=["GET"])
-def check_payment():
-    order_id = request.args.get("order_id")
+    return jsonify({
+        "status": payment_link["status"]
+    })
 
-    payments = client.order.payments(order_id)
-
-    if payments["count"] > 0:
-        payment = payments["items"][0]
-        return jsonify({
-            "status": payment["status"]
-        })
-
-    return jsonify({"status": "pending"})
-
-# ✅ Render run
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
