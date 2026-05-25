@@ -1,10 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template_string
 import razorpay
 import os
 
 app = Flask(__name__)
 
-# ✅ Keys sirf Environment se aayengi (code me nahi likhni)
 client = razorpay.Client(auth=(
     os.getenv("RAZORPAY_KEY_ID"),
     os.getenv("RAZORPAY_KEY_SECRET")
@@ -14,11 +13,11 @@ client = razorpay.Client(auth=(
 def home():
     return "Razorpay server is running"
 
-# ✅ API 1: Order Create
+# ✅ Order create API
 @app.route("/create_order", methods=["POST"])
 def create_order():
     data = request.json
-    amount = int(data.get("amount", 1)) * 100  # Rs → paise
+    amount = int(data.get("amount", 1)) * 100
 
     order = client.order.create({
         "amount": amount,
@@ -31,7 +30,42 @@ def create_order():
         "amount": order["amount"]
     })
 
-# ✅ API 2: Payment Status Check
+# ✅ NEW: Payment Page (IMPORTANT 🔥)
+@app.route("/pay")
+def pay():
+    order_id = request.args.get("order_id")
+
+    html = f"""
+    <html>
+    <head>
+        <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    </head>
+    <body>
+        <h2>Processing Payment...</h2>
+        <script>
+            var options = {{
+                "key": "{os.getenv("RAZORPAY_KEY_ID")}",
+                "amount": "100",
+                "currency": "INR",
+                "name": "Water Vending Machine",
+                "description": "Test Payment",
+                "order_id": "{order_id}",
+                "handler": function (response){{
+                    alert("Payment Successful!");
+                }},
+                "theme": {{
+                    "color": "#3399cc"
+                }}
+            }};
+            var rzp = new Razorpay(options);
+            rzp.open();
+        </script>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
+
+# ✅ Payment check
 @app.route("/check_payment", methods=["GET"])
 def check_payment():
     order_id = request.args.get("order_id")
@@ -46,7 +80,7 @@ def check_payment():
 
     return jsonify({"status": "pending"})
 
-# ✅ Render ke liye port setup
+# ✅ Render run
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
